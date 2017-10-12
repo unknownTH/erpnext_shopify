@@ -50,8 +50,13 @@ def valid_customer_and_product(shopify_order):
 
 def create_order(shopify_order, shopify_settings, company=None):
 	so = create_sales_order(shopify_order, shopify_settings, company)
+	create_sales_invoice(shopify_order, shopify_settings, so)
 	if shopify_order.get("financial_status") == "paid" and cint(shopify_settings.sync_sales_invoice):
-		create_sales_invoice(shopify_order, shopify_settings, so)
+   		si = frappe.db.get_value("Sales Invoice", {"shopify_order_id": shopify_order.get("id")}, "name")
+		si = frappe.get_doc("Sales Invoice", si)
+    		si.submit()
+    		make_payament_entry_against_sales_invoice(si, shopify_settings)
+    		frappe.db.commit()
 
 	if shopify_order.get("fulfillments") and cint(shopify_settings.sync_delivery_note):
 		create_delivery_note(shopify_order, shopify_settings, so)
@@ -97,8 +102,7 @@ def create_sales_invoice(shopify_order, shopify_settings, so):
 		si.naming_series = shopify_settings.sales_invoice_series or "SI-Shopify-"
 		si.flags.ignore_mandatory = True
 		set_cost_center(si.items, shopify_settings.cost_center)
-		si.submit()
-		make_payament_entry_against_sales_invoice(si, shopify_settings)
+		si.save()
 		frappe.db.commit()
 
 def set_cost_center(items, cost_center):
@@ -107,11 +111,12 @@ def set_cost_center(items, cost_center):
 
 def make_payament_entry_against_sales_invoice(doc, shopify_settings):
 	from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
-	payemnt_entry = get_payment_entry(doc.doctype, doc.name, bank_account=shopify_settings.cash_bank_account)
-	payemnt_entry.flags.ignore_mandatory = True
-	payemnt_entry.reference_no = doc.name
-	payemnt_entry.reference_date = nowdate()
-	payemnt_entry.submit()
+	if not doc.status == "Paid":
+		payemnt_entry = get_payment_entry(doc.doctype, doc.name, bank_account=shopify_settings.cash_bank_account)
+		payemnt_entry.flags.ignore_mandatory = True
+		payemnt_entry.reference_no = doc.name
+		payemnt_entry.reference_date = nowdate()
+		payemnt_entry.submit()
 
 def create_delivery_note(shopify_order, shopify_settings, so):
 	for fulfillment in shopify_order.get("fulfillments"):
@@ -124,6 +129,7 @@ def create_delivery_note(shopify_order, shopify_settings, so):
 			dn.items = get_fulfillment_items(dn.items, fulfillment.get("line_items"), shopify_settings)
 			dn.flags.ignore_mandatory = True
 			dn.save()
+			dn.submit()
 			frappe.db.commit()
 
 def get_fulfillment_items(dn_items, fulfillment_items, shopify_settings):
