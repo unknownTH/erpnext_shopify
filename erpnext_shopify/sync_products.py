@@ -15,7 +15,7 @@ def sync_products(price_list, warehouse):
 	shopify_item_list = []
 	sync_shopify_items(warehouse, shopify_item_list)
 	frappe.local.form_dict.count_dict["products"] = len(shopify_item_list)
-	sync_erpnext_items(price_list, warehouse, shopify_item_list)
+	# sync_erpnext_items(price_list, warehouse, shopify_item_list)
 
 def sync_shopify_items(warehouse, shopify_item_list):
 	for shopify_item in get_shopify_items():
@@ -106,8 +106,8 @@ def create_item(shopify_item, warehouse, has_variant=0, attributes=None,variant_
 		"shopify_variant_id": shopify_item.get("variant_id"),
 		"variant_of": variant_of,
 		"sync_with_shopify": 1,
-		"is_stock_item": 1,
-		"item_code": cstr(shopify_item.get("item_code")) or cstr(shopify_item.get("id")),
+		"is_stock_item": 0,
+		"item_code": shopify_item.get("title"),
 		"item_name": shopify_item.get("title"),
 		"description": shopify_item.get("body_html") or shopify_item.get("title"),
 		"shopify_description": shopify_item.get("body_html") or shopify_item.get("title"),
@@ -120,7 +120,8 @@ def create_item(shopify_item, warehouse, has_variant=0, attributes=None,variant_
 		"image": get_item_image(shopify_item),
 		"weight_uom": shopify_item.get("weight_unit"),
 		"net_weight": shopify_item.get("weight"),
-		"default_supplier": get_supplier(shopify_item)
+		"default_supplier": get_supplier(shopify_item),
+		"default_material_request_type": "Manufacture"
 	}
 	item_dict["web_long_description"] = item_dict["shopify_description"]
 
@@ -149,15 +150,16 @@ def create_item_variants(shopify_item, warehouse, attributes, shopify_variants_a
 		for variant in shopify_item.get("variants"):
 			shopify_item_variant = {
 				"id" : variant.get("id"),
-				"item_code": variant.get("id"),
-				"title": variant.get("title"),
+				"item_code": shopify_item.get("title") + ": " + variant.get("title"),
+				"title": shopify_item.get("title") + ": " + variant.get("title"),
 				"product_type": shopify_item.get("product_type"),
 				"sku": variant.get("sku"),
 				"uom": template_item.stock_uom or _("Nos"),
 				"item_price": variant.get("price"),
 				"variant_id": variant.get("id"),
 				"weight_unit": variant.get("weight_unit"),
-				"weight": variant.get("weight")
+				"weight": variant.get("weight"),
+				"variant_image": get_variant_image(shopify_item, variant)
 			}
 
 			for i, variant_attr in enumerate(shopify_variants_attr_list):
@@ -210,9 +212,18 @@ def add_to_price_list(item, name):
 		item_rate.save()
 
 def get_item_image(shopify_item):
-	if shopify_item.get("image"):
-		return shopify_item.get("image").get("src")
-	return None
+    if shopify_item.get("image"):
+        return shopify_item.get("image").get("src")
+    elif shopify_item.get("variant_image"):
+        return shopify_item.get("variant_image")
+    return None
+
+def get_variant_image(shopify_item, variant):
+    if variant.get("image_id"):
+        for image in shopify_item.get("images"):
+            if image.get("id") == variant.get("image_id"):
+                return image.get("src")
+    return None
 
 def get_supplier(shopify_item):
 	if shopify_item.get("vendor"):
