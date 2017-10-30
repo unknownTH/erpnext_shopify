@@ -3,7 +3,7 @@ import frappe
 from frappe import _
 import json, math, time, pytz
 from .exceptions import ShopifyError
-from frappe.utils import get_request_session, get_datetime, get_time_zone
+from frappe.utils import get_request_session, get_datetime, get_time_zone, encode
 
 def check_api_call_limit(response):
 	"""
@@ -104,7 +104,7 @@ def get_shopify_items(ignore_filter_conditions=False):
 
 	filter_condition = ''
 	if not ignore_filter_conditions:
-		filter_condition = get_filtering_condition()
+		filter_condition = get_filtering_condition().encode("utf-8")
 
 	for page_idx in xrange(0, get_total_pages("products/count.json?", ignore_filter_conditions) or 1):
 		shopify_products.extend(get_request('/admin/products.json?limit=250&page={0}&{1}'.format(page_idx+1,
